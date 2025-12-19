@@ -2,70 +2,81 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Micro:bit Araba</title>
+    <title>AI Micro:bit Kontrolü</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f2f5; }
-        #webcam-container { margin: 20px auto; border: 4px solid #333; width: 200px; height: 200px; background: #ddd; }
-        .btn { padding: 12px 20px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; margin: 5px; }
-        .btn-blue { background: #007bff; color: white; }
-        .btn-green { background: #28a745; color: white; }
-        #label-container { font-size: 20px; font-weight: bold; margin-top: 15px; min-height: 30px; }
-        #status { font-size: 14px; color: #555; margin-top: 10px; }
+        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f8f9fa; }
+        #webcam-container { margin: 20px auto; width: 200px; height: 200px; border: 3px solid #333; border-radius: 10px; background: #eee; }
+        .btn { padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 10px; color: white; }
+        .btn-blue { background: #007bff; }
+        .btn-green { background: #28a745; }
+        #label-container { font-size: 22px; font-weight: bold; color: #333; margin-top: 15px; }
+        #status-msg { color: #666; margin-top: 10px; font-style: italic; }
     </style>
 </head>
 <body>
 
-    <h1>AI Araba Kontrolü</h1>
+    <h2>AI Araba Kontrol Merkezi</h2>
     
     <button class="btn btn-blue" onclick="connectMicrobit()">1. Micro:bit'e Bağlan</button>
     <button class="btn btn-green" onclick="init()">2. Kamerayı Başlat</button>
 
     <div id="webcam-container"></div>
-    <div id="label-container">Bekleniyor...</div>
-    <div id="status">Durum: Hazır</div>
+    <div id="label-container">Model henüz yüklenmedi</div>
+    <div id="status-msg">Durum: Bekleniyor...</div>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
     <script>
-        // TEHLİKE: Buradaki linkin sonundaki / işaretini unutma!
-        const URL = "https://teachablemachine.withgoogle.com/models/4n5S2VjE2/"; 
+        // ÖNEMLİ: Kendi linkini buraya yapıştır ve sonunda / olduğundan emin ol
+        const MODEL_URL = "https://teachablemachine.withgoogle.com/models/SENIN_MODEL_IDN/"; 
         
-        let model, webcam, bluetoothCharacteristic;
+        let model, webcam, bluetoothChar;
+
+        // Yardımcı Fonksiyon: Mesajları güvenli yazdırır
+        function log(msg) {
+            const el = document.getElementById("status-msg");
+            if (el) el.innerText = "Durum: " + msg;
+            console.log(msg);
+        }
 
         async function connectMicrobit() {
             try {
+                log("Cihaz aranıyor...");
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'BBC micro:bit' }],
                     optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
                 });
                 const server = await device.getServer();
                 const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-                bluetoothCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-                updateStatus("Micro:bit Bağlandı! ✅", "green");
+                bluetoothChar = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+                log("Micro:bit Bağlandı! ✅");
             } catch (e) {
-                updateStatus("Bağlantı Hatası: " + e.message, "red");
+                log("Bluetooth Hatası: " + e.message);
             }
         }
 
         async function init() {
             try {
-                updateStatus("Model yükleniyor...", "orange");
-                model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+                log("Model yükleniyor...");
+                model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
                 
+                log("Kamera hazırlanıyor...");
                 webcam = new tmImage.Webcam(200, 200, true);
-                await webcam.setup(); 
+                await webcam.setup();
                 await webcam.play();
                 
                 window.requestAnimationFrame(loop);
-                
+
                 const container = document.getElementById("webcam-container");
-                if(container) container.appendChild(webcam.canvas);
-                
-                updateStatus("Kamera ve Model Hazır! ✅", "green");
+                if (container) {
+                    container.innerHTML = ""; // İçini temizle
+                    container.appendChild(webcam.canvas);
+                }
+                log("Sistem Hazır! 🚀");
             } catch (e) {
-                updateStatus("Kamera Hatası: " + e.message, "red");
+                log("Başlatma Hatası: " + e.message);
+                alert("Hata: " + e.message);
             }
         }
 
@@ -77,42 +88,34 @@
 
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
-            let topProb = 0;
-            let topClass = "";
+            let best = { name: "", prob: 0 };
 
             for (let i = 0; i < model.getTotalClasses(); i++) {
-                if (prediction[i].probability > topProb) {
-                    topProb = prediction[i].probability;
-                    topClass = prediction[i].className;
+                if (prediction[i].probability > best.prob) {
+                    best.prob = prediction[i].probability;
+                    best.name = prediction[i].className;
                 }
             }
 
             const labelDiv = document.getElementById("label-container");
             if (labelDiv) {
-                labelDiv.innerHTML = topClass + " (% " + (topProb * 100).toFixed(0) + ")";
+                labelDiv.innerText = best.name + " (%" + (best.prob * 100).toFixed(0) + ")";
             }
 
-            if (topProb > 0.85) {
-                sendToMicrobit(topClass);
-            }
-        }
-
-        function updateStatus(msg, color) {
-            const statusDiv = document.getElementById("status");
-            if (statusDiv) {
-                statusDiv.innerHTML = msg;
-                statusDiv.style.color = color;
+            if (best.prob > 0.85) {
+                sendAction(best.name);
             }
         }
 
-        function sendToMicrobit(label) {
-            if (!bluetoothCharacteristic) return;
-            let cmd = "S"; 
-            if (label === "Ileri") cmd = "F";
-            // Diğer komutlarını buraya ekle...
+        function sendAction(name) {
+            if (!bluetoothChar) return;
+            let msg = "S\n"; // Dur
+            if (name === "Ileri") msg = "F\n";
+            if (name === "Sol") msg = "L\n";
+            if (name === "Sag") msg = "R\n";
 
             let encoder = new TextEncoder();
-            bluetoothCharacteristic.writeValue(encoder.encode(cmd + "\n")).catch(e => console.log(e));
+            bluetoothChar.writeValue(encoder.encode(msg)).catch(() => {});
         }
     </script>
 </body>
