@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Araba Kontrolü</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+</head>
+<body>
+    <h2>Teachable Machine & Micro:bit Araba</h2>
+    <button type="button" onclick="init()">Kamerayı Başlat</button>
+    <button type="button" onclick="connectMicrobit()">Micro:bit'e Bağlan</button>
+    <div id="webcam-container"></div>
+    <div id="label-container"></div>
+
+    <script>
+        const URL = "MODEL_LINKINI_BURAYA_YAPISTIR"; // Teachable Machine'den aldığın link
+        let model, webcam, labelContainer, maxPredictions;
+        let bluetoothCharacteristic;
+
+        // Bluetooth Bağlantısı
+        async function connectMicrobit() {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ namePrefix: 'BBC micro:bit' }],
+                optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] // UART Service
+            });
+            const server = await device.getServer();
+            const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+            bluetoothCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+            alert("Micro:bit'e bağlandı!");
+        }
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            webcam = new tmImage.Webcam(200, 200, true); 
+            await webcam.setup();
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+        }
+async function init() {
+    try {
+        const modelURL = URL + "model.json";
+        const metadataURL = URL + "metadata.json";
+
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+
+        webcam = new tmImage.Webcam(200, 200, true); 
+        await webcam.setup(); // Kamera burada başlatılıyor
+        await webcam.play();
+        window.requestAnimationFrame(loop);
+
+        document.getElementById("webcam-container").appendChild(webcam.canvas);
+        document.getElementById("status").innerHTML = "Kamera Hazır!";
+    } catch (e) {
+        console.error(e);
+        alert("Kamera başlatılamadı: " + e.message);
+    }
+}
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+
+                // Eğer olasılık %90 üzerindeyse komut gönder
+                if (prediction[i].probability > 0.90) {
+                    sendCommand(prediction[i].className);
+                }
+            }
+        }
+
+        function sendCommand(label) {
+            if (!bluetoothCharacteristic) return;
+            let msg = "S\n"; // Varsayılan Dur
+            if (label === "Ileri") msg = "F\n";
+            if (label === "Sol") msg = "L\n";
+            
+            let encoder = new TextEncoder();
+            bluetoothCharacteristic.writeValue(encoder.encode(msg));
+        }
+    </script>
+</body>
+</html>
