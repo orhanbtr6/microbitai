@@ -1,48 +1,48 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>AI Micro:bit Kontrolü</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Araba Mobil</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f8f9fa; }
-        #webcam-container { margin: 20px auto; width: 200px; height: 200px; border: 3px solid #333; border-radius: 10px; background: #eee; }
-        .btn { padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 10px; color: white; }
-        .btn-blue { background: #007bff; }
-        .btn-green { background: #28a745; }
-        #label-container { font-size: 22px; font-weight: bold; color: #333; margin-top: 15px; }
-        #status-msg { color: #666; margin-top: 10px; font-style: italic; }
+        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #eee; }
+        #webcam-container { margin: 10px auto; width: 200px; height: 200px; border: 5px solid #333; background: #000; border-radius: 10px; position: relative; }
+        #webcam-container canvas { width: 100% !important; height: auto !important; border-radius: 5px; }
+        .btn { width: 80%; padding: 15px; font-size: 18px; margin: 10px; border-radius: 10px; border: none; color: white; font-weight: bold; }
+        .btn-blue { background: #3498db; }
+        .btn-green { background: #2ecc71; }
+        #status { background: #fff; padding: 10px; margin: 10px; border-radius: 5px; font-size: 14px; color: red; min-height: 20px; }
     </style>
 </head>
 <body>
 
-    <h2>AI Araba Kontrol Merkezi</h2>
+    <h2>AI Mobil Kontrol</h2>
+    <div id="status">Durum: Hazır. Lütfen önce 1'e basın.</div>
     
     <button class="btn btn-blue" onclick="connectMicrobit()">1. Micro:bit'e Bağlan</button>
     <button class="btn btn-green" onclick="init()">2. Kamerayı Başlat</button>
 
     <div id="webcam-container"></div>
-    <div id="label-container">Model henüz yüklenmedi</div>
-    <div id="status-msg">Durum: Bekleniyor...</div>
+    <div id="label-container" style="font-size: 24px; font-weight: bold;"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
     <script>
-        // ÖNEMLİ: Kendi linkini buraya yapıştır ve sonunda / olduğundan emin ol
-        const MODEL_URL = "https://teachablemachine.withgoogle.com/models/SENIN_MODEL_IDN/"; 
+        // ÖNEMLİ: Linkin doğruluğunu kontrol et!
+        const URL = "https://teachablemachine.withgoogle.com/models/SENIN_MODEL_IDN/"; 
         
-        let model, webcam, bluetoothChar;
+        let model, webcam, labelContainer, maxPredictions;
+        let bluetoothChar;
 
-        // Yardımcı Fonksiyon: Mesajları güvenli yazdırır
-        function log(msg) {
-            const el = document.getElementById("status-msg");
-            if (el) el.innerText = "Durum: " + msg;
+        function updateStatus(msg) {
+            document.getElementById("status").innerHTML = msg;
             console.log(msg);
         }
 
         async function connectMicrobit() {
             try {
-                log("Cihaz aranıyor...");
+                updateStatus("Bluetooth aranıyor...");
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'BBC micro:bit' }],
                     optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
@@ -50,33 +50,46 @@
                 const server = await device.getServer();
                 const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
                 bluetoothChar = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-                log("Micro:bit Bağlandı! ✅");
+                updateStatus("<span style='color:green'>Micro:bit Bağlandı! ✅</span>");
             } catch (e) {
-                log("Bluetooth Hatası: " + e.message);
+                updateStatus("Bağlantı Hatası: " + e.message);
             }
         }
 
         async function init() {
+            updateStatus("Sistem başlatılıyor... Lütfen bekleyin.");
             try {
-                log("Model yükleniyor...");
-                model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+                // Modeli yükle
+                updateStatus("Model yükleniyor...");
+                model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+                maxPredictions = model.getTotalClasses();
+
+                // Kamera kurulumu
+                updateStatus("Kamera açılıyor...");
+                const flip = true; 
+                webcam = new tmImage.Webcam(200, 200, flip); 
                 
-                log("Kamera hazırlanıyor...");
-                webcam = new tmImage.Webcam(200, 200, true);
-                await webcam.setup();
+                // MOBİL İÇİN KRİTİK: Arka kamera yerine ön kamerayı zorla
+                await webcam.setup({ facingMode: "user" }); 
+                
+                updateStatus("Kamera oynatılıyor...");
                 await webcam.play();
                 
                 window.requestAnimationFrame(loop);
 
                 const container = document.getElementById("webcam-container");
-                if (container) {
-                    container.innerHTML = ""; // İçini temizle
-                    container.appendChild(webcam.canvas);
-                }
-                log("Sistem Hazır! 🚀");
+                container.innerHTML = "";
+                container.appendChild(webcam.canvas);
+                
+                // Mobilde videonun oynaması için gerekli öznitelikler
+                const video = webcam.webcam;
+                video.setAttribute('playsinline', '');
+                video.setAttribute('muted', '');
+                
+                updateStatus("<span style='color:green'>HER ŞEY HAZIR! 🚀</span>");
             } catch (e) {
-                log("Başlatma Hatası: " + e.message);
-                alert("Hata: " + e.message);
+                updateStatus("HATA: " + e.message);
+                alert("Başlatma hatası: " + e.message);
             }
         }
 
@@ -88,34 +101,21 @@
 
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
-            let best = { name: "", prob: 0 };
-
-            for (let i = 0; i < model.getTotalClasses(); i++) {
-                if (prediction[i].probability > best.prob) {
-                    best.prob = prediction[i].probability;
-                    best.name = prediction[i].className;
+            let top = { name: "", prob: 0 };
+            for (let i = 0; i < maxPredictions; i++) {
+                if(prediction[i].probability > top.prob) {
+                    top.prob = prediction[i].probability;
+                    top.name = prediction[i].className;
                 }
             }
-
-            const labelDiv = document.getElementById("label-container");
-            if (labelDiv) {
-                labelDiv.innerText = best.name + " (%" + (best.prob * 100).toFixed(0) + ")";
-            }
-
-            if (best.prob > 0.85) {
-                sendAction(best.name);
-            }
+            document.getElementById("label-container").innerHTML = top.name;
+            if(top.prob > 0.8) sendCommand(top.name);
         }
 
-        function sendAction(name) {
+        function sendCommand(label) {
             if (!bluetoothChar) return;
-            let msg = "S\n"; // Dur
-            if (name === "Ileri") msg = "F\n";
-            if (name === "Sol") msg = "L\n";
-            if (name === "Sag") msg = "R\n";
-
-            let encoder = new TextEncoder();
-            bluetoothChar.writeValue(encoder.encode(msg)).catch(() => {});
+            let msg = label === "Ileri" ? "F\n" : "S\n";
+            bluetoothChar.writeValue(new TextEncoder().encode(msg)).catch(() => {});
         }
     </script>
 </body>
