@@ -1,71 +1,74 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
-    <title>AI Araba Kontrolü</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Micro:bit Araba</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f2f5; }
+        #webcam-container { margin: 20px auto; border: 4px solid #333; width: 200px; height: 200px; background: #ddd; }
+        .btn { padding: 12px 20px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; margin: 5px; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-green { background: #28a745; color: white; }
+        #label-container { font-size: 20px; font-weight: bold; margin-top: 15px; min-height: 30px; }
+        #status { font-size: 14px; color: #555; margin-top: 10px; }
+    </style>
 </head>
 <body>
-    <h2>Teachable Machine & Micro:bit Araba</h2>
-    <button type="button" onclick="init()">Kamerayı Başlat</button>
-    <button type="button" onclick="connectMicrobit()">Micro:bit'e Bağlan</button>
+
+    <h1>AI Araba Kontrolü</h1>
+    
+    <button class="btn btn-blue" onclick="connectMicrobit()">1. Micro:bit'e Bağlan</button>
+    <button class="btn btn-green" onclick="init()">2. Kamerayı Başlat</button>
+
     <div id="webcam-container"></div>
-    <div id="label-container"></div>
+    <div id="label-container">Bekleniyor...</div>
+    <div id="status">Durum: Hazır</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
     <script>
-        const URL = "https://teachablemachine.withgoogle.com/models/4n5S2VjE2/"; // Teachable Machine'den aldığın link
-        let model, webcam, labelContainer, maxPredictions;
-        let bluetoothCharacteristic;
+        // TEHLİKE: Buradaki linkin sonundaki / işaretini unutma!
+        const URL = "https://teachablemachine.withgoogle.com/models/4n5S2VjE2/"; 
+        
+        let model, webcam, bluetoothCharacteristic;
 
-        // Bluetooth Bağlantısı
         async function connectMicrobit() {
-            const device = await navigator.bluetooth.requestDevice({
-                filters: [{ namePrefix: 'BBC micro:bit' }],
-                optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] // UART Service
-            });
-            const server = await device.getServer();
-            const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-            bluetoothCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-            alert("Micro:bit'e bağlandı!");
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'BBC micro:bit' }],
+                    optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
+                });
+                const server = await device.getServer();
+                const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+                bluetoothCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+                updateStatus("Micro:bit Bağlandı! ✅", "green");
+            } catch (e) {
+                updateStatus("Bağlantı Hatası: " + e.message, "red");
+            }
         }
 
         async function init() {
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
-            model = await tmImage.load(modelURL, metadataURL);
-            maxPredictions = model.getTotalClasses();
-
-            webcam = new tmImage.Webcam(200, 200, true); 
-            await webcam.setup();
-            await webcam.play();
-            window.requestAnimationFrame(loop);
-
-            document.getElementById("webcam-container").appendChild(webcam.canvas);
-            labelContainer = document.getElementById("label-container");
-            for (let i = 0; i < maxPredictions; i++) {
-                labelContainer.appendChild(document.createElement("div"));
+            try {
+                updateStatus("Model yükleniyor...", "orange");
+                model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+                
+                webcam = new tmImage.Webcam(200, 200, true);
+                await webcam.setup(); 
+                await webcam.play();
+                
+                window.requestAnimationFrame(loop);
+                
+                const container = document.getElementById("webcam-container");
+                if(container) container.appendChild(webcam.canvas);
+                
+                updateStatus("Kamera ve Model Hazır! ✅", "green");
+            } catch (e) {
+                updateStatus("Kamera Hatası: " + e.message, "red");
             }
         }
-async function init() {
-    try {
-        const modelURL = URL + "model.json";
-        const metadataURL = URL + "metadata.json";
 
-        model = await tmImage.load(modelURL, metadataURL);
-        maxPredictions = model.getTotalClasses();
-
-        webcam = new tmImage.Webcam(200, 200, true); 
-        await webcam.setup(); // Kamera burada başlatılıyor
-        await webcam.play();
-        window.requestAnimationFrame(loop);
-
-        document.getElementById("webcam-container").appendChild(webcam.canvas);
-        document.getElementById("status").innerHTML = "Kamera Hazır!";
-    } catch (e) {
-        console.error(e);
-        alert("Kamera başlatılamadı: " + e.message);
-    }
-}
         async function loop() {
             webcam.update();
             await predict();
@@ -74,25 +77,42 @@ async function init() {
 
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
-            for (let i = 0; i < maxPredictions; i++) {
-                const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
-                labelContainer.childNodes[i].innerHTML = classPrediction;
+            let topProb = 0;
+            let topClass = "";
 
-                // Eğer olasılık %90 üzerindeyse komut gönder
-                if (prediction[i].probability > 0.90) {
-                    sendCommand(prediction[i].className);
+            for (let i = 0; i < model.getTotalClasses(); i++) {
+                if (prediction[i].probability > topProb) {
+                    topProb = prediction[i].probability;
+                    topClass = prediction[i].className;
                 }
+            }
+
+            const labelDiv = document.getElementById("label-container");
+            if (labelDiv) {
+                labelDiv.innerHTML = topClass + " (% " + (topProb * 100).toFixed(0) + ")";
+            }
+
+            if (topProb > 0.85) {
+                sendToMicrobit(topClass);
             }
         }
 
-        function sendCommand(label) {
+        function updateStatus(msg, color) {
+            const statusDiv = document.getElementById("status");
+            if (statusDiv) {
+                statusDiv.innerHTML = msg;
+                statusDiv.style.color = color;
+            }
+        }
+
+        function sendToMicrobit(label) {
             if (!bluetoothCharacteristic) return;
-            let msg = "S\n"; // Varsayılan Dur
-            if (label === "Ileri") msg = "F\n";
-            if (label === "Sol") msg = "L\n";
-            
+            let cmd = "S"; 
+            if (label === "Ileri") cmd = "F";
+            // Diğer komutlarını buraya ekle...
+
             let encoder = new TextEncoder();
-            bluetoothCharacteristic.writeValue(encoder.encode(msg));
+            bluetoothCharacteristic.writeValue(encoder.encode(cmd + "\n")).catch(e => console.log(e));
         }
     </script>
 </body>
