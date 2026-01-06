@@ -18,7 +18,11 @@
 
     <h2>Yüz Hareket Puanlama</h2>
     <div id="status">Kamera bekleniyor...</div>
-    
+    <div class="panel">
+    <button id="connect_usb" style="background: #007bff; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">
+        Micro:bit'e Bağlan
+    </button>
+    </div>
     <div class="view-group">
         <video id="input_video"></video>
         <canvas id="output_canvas"></canvas>
@@ -30,6 +34,29 @@
     </div>
 
 <script>
+   let port;
+let writer;
+
+// USB Bağlantı Fonksiyonu
+document.getElementById('connect_usb').addEventListener('click', async () => {
+    try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        writer = port.writable.getWriter();
+        alert("Micro:bit Bağlandı!");
+    } catch (err) {
+        console.error("Bağlantı hatası:", err);
+    }
+});
+
+// Veriyi Micro:bit'e gönderen fonksiyon
+async function sendToMicrobit(prefix, value) {
+    if (writer) {
+        const data = `${prefix}${Math.round(value)}\n`;
+        const encoder = new TextEncoder();
+        await writer.write(encoder.encode(data));
+    }
+}
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
@@ -39,7 +66,11 @@
         statusDiv.innerText = "Sistem Çalışıyor ✅";
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        
+        // Gülümseme puanını S harfiyle gönder
+sendToMicrobit("S", smileScore); 
+
+// Kaş puanını B harfiyle gönder
+sendToMicrobit("B", browScore);
         if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
             const landmarks = results.multiFaceLandmarks[0];
 
@@ -98,4 +129,5 @@
 </script>
 </body>
 </html>
+
 
