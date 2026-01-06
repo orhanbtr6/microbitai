@@ -34,6 +34,20 @@
     </div>
 
 <script>
+
+       // Kamera Başlatma
+    const camera = new window.Camera(videoElement, {
+        onFrame: async () => {
+            await faceMesh.send({image: videoElement});
+        },
+        width: 640,
+        height: 480
+    });
+
+    camera.start().catch(err => {
+        statusDiv.innerText = "Hata: Kamera erişimi engellendi! (Lütfen HTTPS veya Localhost kullanın)";
+        console.error(err);
+    });
     let uartCharacteristic;
 
 document.getElementById('connect_ble').addEventListener('click', async () => {
@@ -141,22 +155,11 @@ sendToMicrobit("B", browScore);
 
     faceMesh.onResults(onResults);
 
-    // Kamera Başlatma
-    const camera = new window.Camera(videoElement, {
-        onFrame: async () => {
-            await faceMesh.send({image: videoElement});
-        },
-        width: 640,
-        height: 480
-    });
-
-    camera.start().catch(err => {
-        statusDiv.innerText = "Hata: Kamera erişimi engellendi! (Lütfen HTTPS veya Localhost kullanın)";
-        console.error(err);
-    });
+ 
 </script>
 </body>
 </html>
+
 
 
 
