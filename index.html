@@ -116,14 +116,7 @@
             document.getElementById('b_score').innerText = Math.round(browScore);
             transmit("B", browScore);
 
-            // Noktaları Çiz
-            canvasCtx.fillStyle = "#00ff96";
-            [61, 291, 105, 145].forEach(i => {
-                const p = landmarks[i];
-                canvasCtx.beginPath();
-                canvasCtx.arc(p.x * canvasElement.width, p.y * canvasElement.height, 3, 0, 2 * Math.PI);
-                canvasCtx.fill();
-            });
+           
         }
         canvasCtx.restore();
     }
