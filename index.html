@@ -35,29 +35,36 @@
     const canvasCtx = canvasElement.getContext('2d');
     const statusDiv = document.getElementById('status');
 
-    function onResults(results) {
+   function onResults(results) {
         statusDiv.innerText = "Sistem Çalışıyor ✅";
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
         
-        if (results.multiFaceLandmarks) {
-            for (const landmarks of results.multiFaceLandmarks) {
-                // Basit Puanlama Mantığı
-                const topLip = landmarks[13];
-                const bottomLip = landmarks[14];
-                const distance = Math.sqrt(Math.pow(topLip.x - bottomLip.x, 2) + Math.pow(topLip.y - bottomLip.y, 2));
-                
-                document.getElementById('s_score').innerText = Math.round(distance * 1000);
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            const landmarks = results.multiFaceLandmarks[0];
 
-                // Noktaları Çiz
-                canvasCtx.fillStyle = "#00FF00";
-                for(let i=0; i<landmarks.length; i+=10) { // Her 10 noktadan birini çiz (performans için)
-                    const p = landmarks[i];
-                    canvasCtx.beginPath();
-                    canvasCtx.arc(p.x * canvasElement.width, p.y * canvasElement.height, 2, 0, 2 * Math.PI);
-                    canvasCtx.fill();
-                }
-            }
+            // 1. GÜLÜMSEME PUANI
+            const mouthLeft = landmarks[61];
+            const mouthRight = landmarks[291];
+            const smileDist = Math.hypot(mouthLeft.x - mouthRight.x, mouthLeft.y - mouthRight.y);
+            const smileScore = Math.min(100, Math.max(0, (smileDist - 0.07) * 2000));
+            document.getElementById('s_score').innerText = Math.round(smileScore);
+
+            // 2. KAŞ HAREKET PUANI (Şaşkınlık)
+            const eyebrowTop = landmarks[105];
+            const eyeBottom = landmarks[145];
+            const browDist = Math.abs(eyebrowTop.y - eyeBottom.y);
+            const browScore = Math.min(100, Math.max(0, (browDist - 0.09) * 2500));
+            document.getElementById('b_score').innerText = Math.round(browScore);
+
+            // Noktaları ekranda göster (Hangi noktaların ölçüldüğünü görmen için)
+            canvasCtx.fillStyle = "#00FF96";
+            [105, 145, 61, 291].forEach(index => {
+                const p = landmarks[index];
+                canvasCtx.beginPath();
+                canvasCtx.arc(p.x * canvasElement.width, p.y * canvasElement.height, 4, 0, 2 * Math.PI);
+                canvasCtx.fill();
+            });
         }
         canvasCtx.restore();
     }
@@ -91,3 +98,4 @@
 </script>
 </body>
 </html>
+
