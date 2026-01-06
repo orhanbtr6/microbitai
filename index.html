@@ -1,122 +1,74 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Araba Mobil</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yüz Hareket Puanlama</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    
     <style>
-        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #eee; }
-        #webcam-container { margin: 10px auto; width: 200px; height: 200px; border: 5px solid #333; background: #000; border-radius: 10px; position: relative; }
-        #webcam-container canvas { width: 100% !important; height: auto !important; border-radius: 5px; }
-        .btn { width: 80%; padding: 15px; font-size: 18px; margin: 10px; border-radius: 10px; border: none; color: white; font-weight: bold; }
-        .btn-blue { background: #3498db; }
-        .btn-green { background: #2ecc71; }
-        #status { background: #fff; padding: 10px; margin: 10px; border-radius: 5px; font-size: 14px; color: red; min-height: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; }
+        .container { position: relative; margin-top: 20px; border-radius: 15px; overflow: hidden; box-shadow: 0 0 20px rgba(0,255,150,0.3); }
+        video, canvas { position: absolute; top: 0; left: 0; transform: scaleX(-1); }
+        video { position: static; display: block; width: 640px; height: 480px; background: #000; }
+        .stats { margin-top: 20px; background: #2d2d2d; padding: 20px; border-radius: 10px; min-width: 300px; }
+        .score-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 1.2rem; }
+        .score-val { font-weight: bold; color: #00ff96; }
     </style>
 </head>
 <body>
-
-    <h2>AI Mobil Kontrol</h2>
-    <div id="status">Durum: Hazır. Lütfen önce 1'e basın.</div>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <h2>Yüz Hareket Analizi</h2>
     
-    <button class="btn btn-blue" onclick="connectMicrobit()">1. Micro:bit'e Bağlan</button>
-    <button class="btn btn-green" onclick="init()">2. Kamerayı Başlat</button>
+    <div class="container">
+        <video id="input_video"></video>
+        <canvas id="output_canvas" width="640" height="480"></canvas>
+    </div>
 
-    <div id="webcam-container"></div>
-    <div id="label-container" style="font-size: 24px; font-weight: bold;"></div>
+    <div class="stats">
+        <div class="score-row">Gülümseme Puanı: <span id="smile_val" class="score-val">0</span></div>
+        <div class="score-row">Göz Açıklığı: <span id="eye_val" class="score-val">0</span></div>
+    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+<script type="module">
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const smileVal = document.getElementById('smile_val');
+    const eyeVal = document.getElementById('eye_val');
 
-    <script>
-        // ÖNEMLİ: Linkin doğruluğunu kontrol et!
-        const URL = "https://teachablemachine.withgoogle.com/models/4n5S2VjE2/"; 
+    // İki nokta arasındaki mesafeyi hesaplayan fonksiyon
+    function getDistance(p1, p2) {
+        return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+    }
+
+    function onResults(results) {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
         
-        let model, webcam, labelContainer, maxPredictions;
-        let bluetoothChar;
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            const landmarks = results.multiFaceLandmarks[0];
 
-        function updateStatus(msg) {
-            document.getElementById("status").innerHTML = msg;
-            console.log(msg);
-        }
+            // 1. Gülümseme Analizi (Dudak kenarları arasındaki mesafe)
+            const mouthLeft = landmarks[61];
+            const mouthRight = landmarks[291];
+            const smileDist = getDistance(mouthLeft, mouthRight);
+            const smileScore = Math.min(100, Math.max(0, (smileDist - 0.05) * 500)).toFixed(0);
+            smileVal.innerText = smileScore + "%";
 
-        async function connectMicrobit() {
-            try {
-                updateStatus("Bluetooth aranıyor...");
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'BBC micro:bit' }],
-                    optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
-                });
-                const server = await device.getServer();
-                const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-                bluetoothChar = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-                updateStatus("<span style='color:green'>Micro:bit Bağlandı! ✅</span>");
-            } catch (e) {
-                updateStatus("Bağlantı Hatası: " + e.message);
+            // 2. Göz Açıklığı Analizi (Üst ve alt göz kapağı)
+            const eyeTop = landmarks[159];
+            const eyeBottom = landmarks[145];
+            const eyeDist = getDistance(eyeTop, eyeBottom);
+            const eyeScore = (eyeDist * 1000).toFixed(0);
+            eyeVal.innerText = eyeScore;
+
+            // Yüz noktalarını ekrana çiz (isteğe bağlı)
+            for (const point of landmarks) {
+                canvasCtx.beginPath();
+                canvasCtx.arc(point.x * canvasElement.width, point.y * canvasElement.height, 1, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = "#00ff96";
+                canvasCtx.fill();
             }
         }
-
-        async function init() {
-            updateStatus("Sistem başlatılıyor... Lütfen bekleyin.");
-            try {
-                // Modeli yükle
-                updateStatus("Model yükleniyor...");
-                model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-                maxPredictions = model.getTotalClasses();
-
-                // Kamera kurulumu
-                updateStatus("Kamera açılıyor...");
-                const flip = true; 
-                webcam = new tmImage.Webcam(200, 200, flip); 
-                
-                // MOBİL İÇİN KRİTİK: Arka kamera yerine ön kamerayı zorla
-                await webcam.setup({ facingMode: "user" }); 
-                
-                updateStatus("Kamera oynatılıyor...");
-                await webcam.play();
-                
-                window.requestAnimationFrame(loop);
-
-                const container = document.getElementById("webcam-container");
-                container.innerHTML = "";
-                container.appendChild(webcam.canvas);
-                
-                // Mobilde videonun oynaması için gerekli öznitelikler
-                const video = webcam.webcam;
-                video.setAttribute('playsinline', '');
-                video.setAttribute('muted', '');
-                
-                updateStatus("<span style='color:green'>HER ŞEY HAZIR! 🚀</span>");
-            } catch (e) {
-                updateStatus("HATA: " + e.message);
-                alert("Başlatma hatası: " + e.message);
-            }
-        }
-
-        async function loop() {
-            webcam.update();
-            await predict();
-            window.requestAnimationFrame(loop);
-        }
-
-        async function predict() {
-            const prediction = await model.predict(webcam.canvas);
-            let top = { name: "", prob: 0 };
-            for (let i = 0; i < maxPredictions; i++) {
-                if(prediction[i].probability > top.prob) {
-                    top.prob = prediction[i].probability;
-                    top.name = prediction[i].className;
-                }
-            }
-            document.getElementById("label-container").innerHTML = top.name;
-            if(top.prob > 0.8) sendCommand(top.name);
-        }
-
-        function sendCommand(label) {
-            if (!bluetoothChar) return;
-            let msg = label === "Ileri" ? "F\n" : "S\n";
-            bluetoothChar.writeValue(new TextEncoder().encode(msg)).catch(() => {});
-        }
-    </script>
-</body>
-</html>
