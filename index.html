@@ -38,10 +38,11 @@
 
 document.getElementById('connect_ble').addEventListener('click', async () => {
     try {
-        const device = await navigator.bluetooth.requestDevice({
-            filters: [{ namePrefix: 'BBC micro:bit' }],
-            optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] // UART Service UUID
-        });
+      const device = await navigator.bluetooth.requestDevice({
+    // Filtreyi kaldırıp tüm cihazları tarayalım
+    acceptAllDevices: true,
+    optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] // UART Servisi yine de ekli kalmalı
+});
 
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
@@ -156,6 +157,7 @@ sendToMicrobit("B", browScore);
 </script>
 </body>
 </html>
+
 
 
 
