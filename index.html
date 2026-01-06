@@ -19,9 +19,9 @@
     <h2>Yüz Hareket Puanlama</h2>
     <div id="status">Kamera bekleniyor...</div>
     <div class="panel">
-    <button id="connect_usb" style="background: #007bff; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">
-        Micro:bit'e Bağlan
-    </button>
+   <button id="connect_ble" style="background: #00bfff; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">
+    Bluetooth ile Bağlan
+</button>
     </div>
     <div class="view-group">
         <video id="input_video"></video>
@@ -34,6 +34,33 @@
     </div>
 
 <script>
+    let uartCharacteristic;
+
+document.getElementById('connect_ble').addEventListener('click', async () => {
+    try {
+        const device = await navigator.bluetooth.requestDevice({
+            filters: [{ namePrefix: 'BBC micro:bit' }],
+            optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] // UART Service UUID
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+        uartCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e'); // TX Characteristic
+
+        alert("Bluetooth Bağlantısı Başarılı!");
+    } catch (err) {
+        console.error("Bluetooth hatası:", err);
+        alert("Bağlanılamadı. Bluetooth'un açık olduğundan emin olun.");
+    }
+});
+
+async function sendToMicrobit(prefix, value) {
+    if (uartCharacteristic) {
+        const data = `${prefix}${Math.round(value)}\n`;
+        const encoder = new TextEncoder();
+        await uartCharacteristic.writeValue(encoder.encode(data));
+    }
+}
    let port;
 let writer;
 
@@ -129,5 +156,6 @@ sendToMicrobit("B", browScore);
 </script>
 </body>
 </html>
+
 
 
