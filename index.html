@@ -2,73 +2,92 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yüz Hareket Puanlama</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <title>Yüz Analiz Uygulaması</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     
     <style>
-        body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; }
-        .container { position: relative; margin-top: 20px; border-radius: 15px; overflow: hidden; box-shadow: 0 0 20px rgba(0,255,150,0.3); }
-        video, canvas { position: absolute; top: 0; left: 0; transform: scaleX(-1); }
-        video { position: static; display: block; width: 640px; height: 480px; background: #000; }
-        .stats { margin-top: 20px; background: #2d2d2d; padding: 20px; border-radius: 10px; min-width: 300px; }
-        .score-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 1.2rem; }
-        .score-val { font-weight: bold; color: #00ff96; }
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; }
+        .view-group { position: relative; width: 640px; height: 480px; margin: 20px auto; background: #000; border: 3px solid #333; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 640px; height: 480px; transform: scaleX(-1); }
+        .panel { background: #222; padding: 15px; border-radius: 8px; display: inline-block; margin-top: 10px; }
+        #status { color: #ffcc00; font-weight: bold; }
     </style>
 </head>
 <body>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <h2>Yüz Hareket Analizi</h2>
+
+    <h2>Yüz Hareket Puanlama</h2>
+    <div id="status">Kamera bekleniyor...</div>
     
-    <div class="container">
+    <div class="view-group">
         <video id="input_video"></video>
-        <canvas id="output_canvas" width="640" height="480"></canvas>
+        <canvas id="output_canvas"></canvas>
     </div>
 
-    <div class="stats">
-        <div class="score-row">Gülümseme Puanı: <span id="smile_val" class="score-val">0</span></div>
-        <div class="score-row">Göz Açıklığı: <span id="eye_val" class="score-val">0</span></div>
+    <div class="panel">
+        <div>Gülümseme: %<span id="s_score">0</span></div>
+        <div>Şaşkınlık (Kaş): %<span id="b_score">0</span></div>
     </div>
 
-<script type="module">
+<script>
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
-    const smileVal = document.getElementById('smile_val');
-    const eyeVal = document.getElementById('eye_val');
-
-    // İki nokta arasındaki mesafeyi hesaplayan fonksiyon
-    function getDistance(p1, p2) {
-        return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-    }
+    const statusDiv = document.getElementById('status');
 
     function onResults(results) {
+        statusDiv.innerText = "Sistem Çalışıyor ✅";
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
         
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-            const landmarks = results.multiFaceLandmarks[0];
+        if (results.multiFaceLandmarks) {
+            for (const landmarks of results.multiFaceLandmarks) {
+                // Basit Puanlama Mantığı
+                const topLip = landmarks[13];
+                const bottomLip = landmarks[14];
+                const distance = Math.sqrt(Math.pow(topLip.x - bottomLip.x, 2) + Math.pow(topLip.y - bottomLip.y, 2));
+                
+                document.getElementById('s_score').innerText = Math.round(distance * 1000);
 
-            // 1. Gülümseme Analizi (Dudak kenarları arasındaki mesafe)
-            const mouthLeft = landmarks[61];
-            const mouthRight = landmarks[291];
-            const smileDist = getDistance(mouthLeft, mouthRight);
-            const smileScore = Math.min(100, Math.max(0, (smileDist - 0.05) * 500)).toFixed(0);
-            smileVal.innerText = smileScore + "%";
-
-            // 2. Göz Açıklığı Analizi (Üst ve alt göz kapağı)
-            const eyeTop = landmarks[159];
-            const eyeBottom = landmarks[145];
-            const eyeDist = getDistance(eyeTop, eyeBottom);
-            const eyeScore = (eyeDist * 1000).toFixed(0);
-            eyeVal.innerText = eyeScore;
-
-            // Yüz noktalarını ekrana çiz (isteğe bağlı)
-            for (const point of landmarks) {
-                canvasCtx.beginPath();
-                canvasCtx.arc(point.x * canvasElement.width, point.y * canvasElement.height, 1, 0, 2 * Math.PI);
-                canvasCtx.fillStyle = "#00ff96";
-                canvasCtx.fill();
+                // Noktaları Çiz
+                canvasCtx.fillStyle = "#00FF00";
+                for(let i=0; i<landmarks.length; i+=10) { // Her 10 noktadan birini çiz (performans için)
+                    const p = landmarks[i];
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(p.x * canvasElement.width, p.y * canvasElement.height, 2, 0, 2 * Math.PI);
+                    canvasCtx.fill();
+                }
             }
         }
+        canvasCtx.restore();
+    }
+
+    const faceMesh = new FaceMesh({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+    }});
+
+    faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults(onResults);
+
+    // Kamera Başlatma
+    const camera = new window.Camera(videoElement, {
+        onFrame: async () => {
+            await faceMesh.send({image: videoElement});
+        },
+        width: 640,
+        height: 480
+    });
+
+    camera.start().catch(err => {
+        statusDiv.innerText = "Hata: Kamera erişimi engellendi! (Lütfen HTTPS veya Localhost kullanın)";
+        console.error(err);
+    });
+</script>
+</body>
+</html>
