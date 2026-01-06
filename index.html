@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Yüz Analiz Uygulaması</title>
+    <title>Yüz Analizi & Micro:bit</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     
@@ -10,19 +10,21 @@
         body { font-family: sans-serif; background: #121212; color: white; text-align: center; }
         .view-group { position: relative; width: 640px; height: 480px; margin: 20px auto; background: #000; border: 3px solid #333; }
         video, canvas { position: absolute; top: 0; left: 0; width: 640px; height: 480px; transform: scaleX(-1); }
-        .panel { background: #222; padding: 15px; border-radius: 8px; display: inline-block; margin-top: 10px; }
-        #status { color: #ffcc00; font-weight: bold; }
+        .panel { background: #222; padding: 15px; border-radius: 8px; display: inline-block; margin: 5px; }
+        #status { color: #ffcc00; font-weight: bold; margin: 10px; }
+        button { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; margin: 5px; }
     </style>
 </head>
 <body>
 
     <h2>Yüz Hareket Puanlama</h2>
     <div id="status">Kamera bekleniyor...</div>
+    
     <div class="panel">
-   <button id="connect_ble" style="background: #00bfff; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">
-    Bluetooth ile Bağlan
-</button>
+        <button id="connect_ble" style="background: #00bfff;">Bluetooth ile Bağlan</button>
+        <button id="connect_usb" style="background: #28a745;">USB (Kablo) ile Bağlan</button>
     </div>
+
     <div class="view-group">
         <video id="input_video"></video>
         <canvas id="output_canvas"></canvas>
@@ -34,133 +36,40 @@
     </div>
 
 <script>
-
-       // Kamera Başlatma
-    const camera = new window.Camera(videoElement, {
-        onFrame: async () => {
-            await faceMesh.send({image: videoElement});
-        },
-        width: 640,
-        height: 480
-    });
-
-    camera.start().catch(err => {
-        statusDiv.innerText = "Hata: Kamera erişimi engellendi! (Lütfen HTTPS veya Localhost kullanın)";
-        console.error(err);
-    });
-    let uartCharacteristic;
-
-document.getElementById('connect_ble').addEventListener('click', async () => {
-    try {
-      const device = await navigator.bluetooth.requestDevice({
-    // Filtreyi kaldırıp tüm cihazları tarayalım
-    acceptAllDevices: true,
-    optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] // UART Servisi yine de ekli kalmalı
-});
-
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-        uartCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e'); // TX Characteristic
-
-        alert("Bluetooth Bağlantısı Başarılı!");
-    } catch (err) {
-        console.error("Bluetooth hatası:", err);
-        alert("Bağlanılamadı. Bluetooth'un açık olduğundan emin olun.");
-    }
-});
-
-async function sendToMicrobit(prefix, value) {
-    if (uartCharacteristic) {
-        const data = `${prefix}${Math.round(value)}\n`;
-        const encoder = new TextEncoder();
-        await uartCharacteristic.writeValue(encoder.encode(data));
-    }
-}
-   let port;
-let writer;
-
-// USB Bağlantı Fonksiyonu
-document.getElementById('connect_usb').addEventListener('click', async () => {
-    try {
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200 });
-        writer = port.writable.getWriter();
-        alert("Micro:bit Bağlandı!");
-    } catch (err) {
-        console.error("Bağlantı hatası:", err);
-    }
-});
-
-// Veriyi Micro:bit'e gönderen fonksiyon
-async function sendToMicrobit(prefix, value) {
-    if (writer) {
-        const data = `${prefix}${Math.round(value)}\n`;
-        const encoder = new TextEncoder();
-        await writer.write(encoder.encode(data));
-    }
-}
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
     const statusDiv = document.getElementById('status');
 
-   function onResults(results) {
-        statusDiv.innerText = "Sistem Çalışıyor ✅";
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        // Gülümseme puanını S harfiyle gönder
-sendToMicrobit("S", smileScore); 
+    let uartCharacteristic; // Bluetooth için
+    let writer;            // USB için
+    let lastSentTime = 0;   // Veri gönderme hızını sınırlamak için
 
-// Kaş puanını B harfiyle gönder
-sendToMicrobit("B", browScore);
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-            const landmarks = results.multiFaceLandmarks[0];
+    // --- BAĞLANTI FONKSİYONLARI ---
 
-            // 1. GÜLÜMSEME PUANI
-            const mouthLeft = landmarks[61];
-            const mouthRight = landmarks[291];
-            const smileDist = Math.hypot(mouthLeft.x - mouthRight.x, mouthLeft.y - mouthRight.y);
-            const smileScore = Math.min(100, Math.max(0, (smileDist - 0.07) * 2000));
-            document.getElementById('s_score').innerText = Math.round(smileScore);
-
-            // 2. KAŞ HAREKET PUANI (Şaşkınlık)
-            const eyebrowTop = landmarks[105];
-            const eyeBottom = landmarks[145];
-            const browDist = Math.abs(eyebrowTop.y - eyeBottom.y);
-            const browScore = Math.min(100, Math.max(0, (browDist - 0.09) * 2500));
-            document.getElementById('b_score').innerText = Math.round(browScore);
-
-            // Noktaları ekranda göster (Hangi noktaların ölçüldüğünü görmen için)
-            canvasCtx.fillStyle = "#00FF96";
-            [105, 145, 61, 291].forEach(index => {
-                const p = landmarks[index];
-                canvasCtx.beginPath();
-                canvasCtx.arc(p.x * canvasElement.width, p.y * canvasElement.height, 4, 0, 2 * Math.PI);
-                canvasCtx.fill();
+    // Bluetooth Bağlantısı
+    document.getElementById('connect_ble').addEventListener('click', async () => {
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
             });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+            uartCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+            alert("Bluetooth Başarılı!");
+            statusDiv.innerText = "Bluetooth Bağlı ✅";
+        } catch (err) {
+            console.error(err);
+            alert("Bluetooth Bağlantı Hatası!");
         }
-        canvasCtx.restore();
-    }
-
-    const faceMesh = new FaceMesh({locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-    }});
-
-    faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
     });
 
-    faceMesh.onResults(onResults);
-
- 
-</script>
-</body>
-</html>
-
-
-
-
-
+    // USB Bağlantısı
+    document.getElementById('connect_usb').addEventListener('click', async () => {
+        try {
+            const port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 115200 });
+            writer = port.writable.getWriter();
+            alert("USB Bağlantısı Başarılı!");
+            statusDiv.innerText =
