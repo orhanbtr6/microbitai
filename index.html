@@ -89,7 +89,27 @@
         statusDiv.innerText = "Sistem Çalışıyor ✅";
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        
+        // onResults fonksiyonunun içindeki gönderim mantığını bununla değiştir:
+if (sScore > 40) {
+    send("S", ""); // Sadece 'S' harfi gönder (Smile)
+} else if (bScore > 40) {
+    send("B", ""); // Sadece 'B' harfi gönder (Brow)
+} else {
+    send("X", ""); // 'X' gönder (Ekranı temizle)
+}
+
+// send fonksiyonunu da şu şekilde sadeleştir:
+async function send(prefix, val) {
+    const now = Date.now();
+    if (now - lastSent < 500) return; // Yarım saniyede bir veri gönder (Bağlantıyı yormaz)
+    lastSent = now;
+
+    const msg = prefix + "\n"; // Sadece "S\n", "B\n" veya "X\n" gider
+    const enc = new TextEncoder();
+    try {
+        if (uartChar) await uartChar.writeValue(enc.encode(msg));
+    } catch (e) { console.log("Hata:", e); }
+}
         // Görüntüyü canvas'a tam sığacak şekilde çiz (Zoom'u engeller)
         canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
@@ -134,3 +154,4 @@
 </script>
 </body>
 </html>
+
