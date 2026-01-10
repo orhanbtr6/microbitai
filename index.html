@@ -89,7 +89,23 @@
         statusDiv.innerText = "Sistem Çalışıyor ✅";
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        // onResults fonksiyonunun içindeki gönderim mantığını bununla değiştir:
+    
+        // Görüntüyü canvas'a tam sığacak şekilde çiz (Zoom'u engeller)
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            const landmarks = results.multiFaceLandmarks[0];
+
+            // GÜLÜMSEME HESABI
+            const mouthLeft = landmarks[61];
+            const mouthRight = landmarks[291];
+            const smileDist = Math.hypot(mouthLeft.x - mouthRight.x, mouthLeft.y - mouthRight.y);
+            
+            // Eşiği biraz düşürdük (0.07 yerine 0.05) ve çarpanı ayarladık
+            const smileScore = Math.min(100, Math.max(0, (smileDist - 0.05) * 2500));
+            document.getElementById('s_score').innerText = Math.round(smileScore);
+
+               // onResults fonksiyonunun içindeki gönderim mantığını bununla değiştir:
 if (sScore > 40) {
     send("S", ""); // Sadece 'S' harfi gönder (Smile)
 } else if (bScore > 40) {
@@ -110,25 +126,6 @@ async function send(prefix, val) {
         if (uartChar) await uartChar.writeValue(enc.encode(msg));
     } catch (e) { console.log("Hata:", e); }
 }
-        // Görüntüyü canvas'a tam sığacak şekilde çiz (Zoom'u engeller)
-        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-            const landmarks = results.multiFaceLandmarks[0];
-
-            // GÜLÜMSEME HESABI
-            const mouthLeft = landmarks[61];
-            const mouthRight = landmarks[291];
-            const smileDist = Math.hypot(mouthLeft.x - mouthRight.x, mouthLeft.y - mouthRight.y);
-            
-            // Eşiği biraz düşürdük (0.07 yerine 0.05) ve çarpanı ayarladık
-            const smileScore = Math.min(100, Math.max(0, (smileDist - 0.05) * 2500));
-            document.getElementById('s_score').innerText = Math.round(smileScore);
-
-            // Veriyi gönder (Hassasiyeti test etmek için eşiği Micro:bit kodunda da kontrol et)
-            if (Math.round(smileScore) > 10) { // Sadece anlamlı bir hareket varsa gönder
-                transmit("S", smileScore);
-            }
 
             // KAŞ HESABI
             const browDist = Math.abs(landmarks[105].y - landmarks[145].y);
@@ -154,4 +151,5 @@ async function send(prefix, val) {
 </script>
 </body>
 </html>
+
 
