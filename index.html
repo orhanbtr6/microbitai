@@ -127,19 +127,27 @@ function onResults(results) {
 }
 
 // 2. ADIM: "onResults" FONKSİYONUNUN HEMEN ALTINA BU "send" FONKSİYONUNU EKLE
+let lastSent = 0;
+
 async function send(prefix) {
     const now = Date.now();
-    if (now - lastSent < 500) return; // Yarım saniyede bir veri gönder
+    if (now - lastSent < 400) return;
     lastSent = now;
 
-    const msg = prefix + "\n"; 
+    const msg = prefix + "\n";
     const enc = new TextEncoder();
+
     try {
         if (uartChar) {
-            await uartChar.writeValue(enc.encode(msg));
-            console.log("Micro:bit'e Gitti:", msg); 
+            await uartChar.writeValueWithoutResponse(enc.encode(msg));
+            console.log("Micro:bit:", msg);
         }
-    } catch (e) { console.log("Gönderim Hatası:", e); }
+        if (usbWriter) {
+            await usbWriter.write(enc.encode(msg));
+        }
+    } catch (e) {
+        console.log("Gönderim hatası:", e);
+    }
 }
 
 // ... alttaki faceMesh.setOptions ve camera.start() kısımları aynı kalsın ...
@@ -156,6 +164,7 @@ async function send(prefix) {
 </script>
 </body>
 </html>
+
 
 
 
